@@ -31,7 +31,8 @@ const ADD_MEMORY_TOOL: Tool = {
       },
       userId: {
         type: 'string',
-        description: "User ID for memory storage. If not provided explicitly, use a generic user ID like, 'mem0-mcp-user'",
+        description:
+          "User ID for memory storage. If not provided explicitly, use a generic user ID like, 'mem0-mcp-user'",
       },
     },
     required: ['content', 'userId'],
@@ -40,17 +41,20 @@ const ADD_MEMORY_TOOL: Tool = {
 
 const SEARCH_MEMORIES_TOOL: Tool = {
   name: 'search-memories',
-  description: 'Search through stored memories. This method is called ANYTIME the user asks anything.',
+  description:
+    'Search through stored memories. This method is called ANYTIME the user asks anything.',
   inputSchema: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
-        description: "The search query. This is the query that the user has asked for. Example: 'What did I tell you about the weather last week?' or 'What did I tell you about my friend John?'",
+        description:
+          "The search query. This is the query that the user has asked for. Example: 'What did I tell you about the weather last week?' or 'What did I tell you about my friend John?'",
       },
       userId: {
         type: 'string',
-        description: "User ID for memory storage. If not provided explicitly, use a generic user ID like, 'mem0-mcp-user'",
+        description:
+          "User ID for memory storage. If not provided explicitly, use a generic user ID like, 'mem0-mcp-user'",
       },
     },
     required: ['query', 'userId'],
@@ -71,12 +75,26 @@ const server = new Server(
   }
 );
 
+// ---------- Helpers ----------
+function normalizeOneLine(s: string): string {
+  // collapse CR/LF/Tabs + multiple spaces → single space
+  return (s ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function round(n: any, p = 3): number | any {
+  const num = Number(n);
+  return Number.isFinite(num) ? Number(num.toFixed(p)) : n;
+}
+function truncate(s: string, max = 3500): string {
+  if (!s) return s;
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
 // Helper function to add memories
 async function addMemory(content: string, userId: string) {
   try {
     const messages = [
       { role: 'system', content: 'Memory storage system' },
-      { role: 'user', content }
+      { role: 'user', content },
     ];
     await memoryClient.add(messages, { user_id: userId });
     return true;
@@ -105,14 +123,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const { name, arguments: args } = request.params;
-    
+
     if (!args) {
       throw new Error('No arguments provided');
     }
-    
+
     switch (name) {
       case 'add-memory': {
-        const { content, userId } = args as { content: string, userId: string };
+        const { content, userId } = args as { content: string; userId: string };
         await addMemory(content, userId);
         return {
           content: [
@@ -124,30 +142,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           isError: false,
         };
       }
-      
+
       case 'search-memories': {
-        const { query, userId } = args as { query: string, userId: string };
+        const { query, userId } = args as { query: string; userId: string };
         const results = await searchMemories(query, userId);
-        const formattedResults = results.map((result: any) => 
-          `Memory: ${result.memory}\nRelevance: ${result.score}\n---`
-        ).join('\n');
-        
+
+        // Build a compact, single-line summary of top matches (no newlines).
+        const formatted = (Array.isArray(results) ? results : [])
+          .slice(0, 5)
+          .map((r: any) => {
+            const mem = normalizeOneLine(String(r?.memory ?? ''));
+            const score = round(r?.score ?? 0);
+            // keep each match compact
+            return `Memory: ${mem} | Score: ${score}`;
+          })
+          .join(' || ');
+
+        const singleLine = truncate(
+          normalizeOneLine(formatted || 'No memories found')
+        );
+
         return {
           content: [
             {
               type: 'text',
-              text: formattedResults || 'No memories found',
+              text: singleLine, // absolutely single-line; no \n
             },
           ],
           isError: false,
         };
       }
-      
+
       default:
         return {
-          content: [
-            { type: 'text', text: `Unknown tool: ${name}` },
-          ],
+          content: [{ type: 'text', text: `Unknown tool: ${name}` }],
           isError: true,
         };
     }
@@ -166,12 +194,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Function to log safely
 function safeLog(
-  level: 'error' | 'debug' | 'info' | 'notice' | 'warning' | 'critical' | 'alert' | 'emergency',
+  level:
+    | 'error'
+    | 'debug'
+    | 'info'
+    | 'notice'
+    | 'warning'
+    | 'critical'
+    | 'alert'
+    | 'emergency',
   data: any
 ): void {
   // For stdio transport, log to stderr to avoid protocol interference
-  console.error(`[${level}] ${typeof data === 'object' ? JSON.stringify(data) : data}`);
-  
+  console.error(
+    `[${level}] ${typeof data === 'object' ? JSON.stringify(data) : data}`
+  );
+
   // Send to logging capability if available
   try {
     server.sendLoggingMessage({ level, data });
@@ -184,10 +222,10 @@ function safeLog(
 async function main() {
   try {
     console.error('Initializing Mem0 Memory MCP Server...');
-    
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    
+
     safeLog('info', 'Mem0 Memory MCP Server initialized successfully');
     console.error('Memory MCP Server running on stdio');
   } catch (error) {
