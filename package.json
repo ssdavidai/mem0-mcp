@@ -3,14 +3,17 @@
   "version": "0.0.1",
   "main": "index.js",
   "type": "module",
+  "module": "src/index.ts",
   "bin": {
     "mem0-mcp": "dist/index.js"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "npx @smithery/cli build",
     "clean": "rm -rf dist",
-    "dev": "tsup --watch",
-    "start": "node dist/index.js"
+    "dev": "npx @smithery/cli dev",
+    "start": "node dist/index.js",
+    "build:local": "tsup",
+    "dev:local": "tsup --watch"
   },
   "files": [
     "dist"
