@@ -199,15 +199,24 @@ export default function createServer({ config }: { config: z.infer<typeof config
           const topResult = results[0];
           const memory = normalizeOneLine(String(topResult?.memory ?? ''));
           
-          // Return just the most relevant memory in a clear format
-          // This makes it easier for VAPI to parse and use
-          const response = memory || 'No relevant memory found';
+          // For VAPI: Return JUST the extracted value, super simple
+          // If memory is "User Name is David", just return "David"
+          let response = memory || 'No relevant memory found';
+          
+          // Extract just the key information for common patterns
+          if (memory.toLowerCase().includes('user name is')) {
+            // Extract name: "User Name is David" -> "David"
+            const nameMatch = memory.match(/User Name is (\w+)/i);
+            if (nameMatch) {
+              response = nameMatch[1];
+            }
+          }
 
           return {
             content: [
               {
                 type: 'text',
-                text: response, // Return just the memory content, no scores or formatting
+                text: response, // Return the simplified extracted value
               },
             ],
             isError: false,
