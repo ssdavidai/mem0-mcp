@@ -58,6 +58,11 @@ const SEARCH_MEMORIES_TOOL: Tool = {
         description:
           "User ID for memory storage. If not provided explicitly, use a generic user ID like, 'mem0-mcp-user'",
       },
+      returnAll: {
+        type: 'boolean',
+        description:
+          "If true, returns all matching memories with scores. If false (default), returns only the most relevant memory.",
+      },
     },
     required: ['query', 'userId'],
   },
@@ -152,29 +157,57 @@ export default function createServer({ config }: { config: z.infer<typeof config
         }
 
         case 'search-memories': {
-          const { query, userId } = args as { query: string; userId: string };
+          const { query, userId, returnAll } = args as { query: string; userId: string; returnAll?: boolean };
           const results = await searchMemories(query, userId);
 
-          // Build a compact, single-line summary of top matches (no newlines).
-          const formatted = (Array.isArray(results) ? results : [])
-            .slice(0, 5)
-            .map((r: any) => {
-              const mem = normalizeOneLine(String(r?.memory ?? ''));
-              const score = round(r?.score ?? 0);
-              // keep each match compact
-              return `Memory: ${mem} | Score: ${score}`;
-            })
-            .join(' || ');
+          // For VAPI compatibility, return a clearer, more direct response
+          if (!Array.isArray(results) || results.length === 0) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: 'No memories found',
+                },
+              ],
+              isError: false,
+            };
+          }
 
-          const singleLine = truncate(
-            normalizeOneLine(formatted || 'No memories found')
-          );
+          // If returnAll is true, return all memories with scores
+          if (returnAll) {
+            const formatted = results
+              .slice(0, 5)
+              .map((r: any) => {
+                const mem = normalizeOneLine(String(r?.memory ?? ''));
+                const score = round(r?.score ?? 0);
+                return `${mem} (relevance: ${score})`;
+              })
+              .join('; ');
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: formatted || 'No memories found',
+                },
+              ],
+              isError: false,
+            };
+          }
+
+          // Default: Get the most relevant memory (highest score)
+          const topResult = results[0];
+          const memory = normalizeOneLine(String(topResult?.memory ?? ''));
+          
+          // Return just the most relevant memory in a clear format
+          // This makes it easier for VAPI to parse and use
+          const response = memory || 'No relevant memory found';
 
           return {
             content: [
               {
                 type: 'text',
-                text: singleLine, // absolutely single-line; no \n
+                text: response, // Return just the memory content, no scores or formatting
               },
             ],
             isError: false,
